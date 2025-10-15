@@ -1,5 +1,9 @@
 import {
-  ListObjectsV2Command, GetObjectCommand, PutObjectCommand, DeleteObjectCommand
+  ListObjectsV2Command,
+  GetObjectCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  CopyObjectCommand,
 } from '@aws-sdk/client-s3';
 import { s3, bucketName, publicBase } from '../config/s3.js';
 import { nanoid } from 'nanoid';
@@ -30,7 +34,6 @@ const listProducts = async () => {
   return items;
 };
 
-export const listView = async (_req,res) => res.render('index', { items: await listProducts(), publicBase });
 export const listJson  = async (_req,res) => res.json(await listProducts());
 
 export const newForm = (_req,res) => res.render('form', { product: null, action: '/productos', publicBase });
@@ -104,4 +107,101 @@ export const remove = async (req,res) => {
   if (existing?.imageKey) await s3.send(new DeleteObjectCommand({ Bucket: bucketName, Key: existing.imageKey }));
   await s3.send(new DeleteObjectCommand({ Bucket: bucketName, Key: `products/${id}.json` }));
   res.redirect('/');
+};
+
+// Copia todos los objetos de un prefijo de source -> dest (misma key)
+const copyPrefix = async (prefix, sourceBucket, destBucket) => {
+  let copied = 0, deleted = 0, token = undefined;
+
+  do {
+    const list = await s3.send(new ListObjectsV2Command({
+      Bucket: sourceBucket, Prefix: prefix, ContinuationToken: token
+    }));
+    const objs = list.Contents?.filter(o => o.Key && !o.Key.endsWith('/')) || [];
+
+    for (const obj of objs) {
+      const key = obj.Key;
+      // CopySource debe ir URL-encoded: bucket/key
+      const src = encodeURI(`${sourceBucket}/${key}`);
+      await s3.send(new CopyObjectCommand({
+        Bucket: destBucket,
+        Key: key,
+        CopySource: src,
+      }));
+      copied++;
+    }
+
+    token = list.IsTruncated ? list.NextContinuationToken : undefined;
+  } while (token);
+
+  return { copied, deleted };
+};
+
+export const backupToBucket = async (req, res) => {
+  try {
+    const destBucket = (req.body.destBucket || process.env.BACKUP_BUCKET || '').trim();
+    const includeProducts = !!req.body.includeProducts; // checkbox
+    const deleteAfter = !!req.body.deleteAfter;         // checkbox
+
+    if (!destBucket) {
+      return res.status(400).send('Falta BACKUP_BUCKET o destBucket');
+    }
+    if (destBucket === bucketName) {
+      return res.status(400).send('El bucket destino no puede ser el mismo que el origen');
+    }
+
+    // 1) Copiar uploads/ (imágenes)
+    const resUploads = await copyPrefix('uploads/', bucketName, destBucket);
+
+    // 2) Opcional: copiar products/ (JSON)
+    let resProducts = { copied: 0, deleted: 0 };
+    if (includeProducts) {
+      resProducts = await copyPrefix('products/', bucketName, destBucket);
+    }
+
+    // 3) Opcional: eliminar originales
+    if (deleteAfter) {
+      // borrar uploads/
+      let token;
+      do {
+        const list = await s3.send(new ListObjectsV2Command({ Bucket: bucketName, Prefix: 'uploads/', ContinuationToken: token }));
+        const objs = list.Contents?.filter(o => o.Key && !o.Key.endsWith('/')) || [];
+        for (const o of objs) {
+          await s3.send(new DeleteObjectCommand({ Bucket: bucketName, Key: o.Key }));
+        }
+        token = list.IsTruncated ? list.NextContinuationToken : undefined;
+      } while (token);
+
+      // (Opcional) borrar products/ si también los copiaste
+      if (includeProducts) {
+        let t2;
+        do {
+          const list = await s3.send(new ListObjectsV2Command({ Bucket: bucketName, Prefix: 'products/', ContinuationToken: t2 }));
+          const objs = list.Contents?.filter(o => o.Key && !o.Key.endsWith('/')) || [];
+          for (const o of objs) {
+            await s3.send(new DeleteObjectCommand({ Bucket: bucketName, Key: o.Key }));
+          }
+          t2 = list.IsTruncated ? list.NextContinuationToken : undefined;
+        } while (t2);
+      }
+    }
+
+    // Mensaje simple de resultado
+    const msg = `Backup OK → destino: ${destBucket}. Copiados: uploads=${resUploads.copied}, products=${resProducts.copied}${deleteAfter ? ' (eliminados del origen)' : ''}.`;
+    // Muestra en index con un query param
+    res.redirect(`/?msg=${encodeURIComponent(msg)}`);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error en backup: ' + (err?.message || 'desconocido'));
+  }
+};
+
+export const listView = async (req, res) => {
+  const items = await listProducts();
+  res.render('index', {
+    items,
+    publicBase,
+    backupBucket: process.env.BACKUP_BUCKET || '',
+    msg: req.query?.msg || ''
+  });
 };

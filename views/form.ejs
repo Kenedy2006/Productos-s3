@@ -1,0 +1,82 @@
+<%- include('layout') %>
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="h4 mb-3"><%= product ? 'Editar producto' : 'Nuevo producto' %></h1>
+
+        <form action="<%= action %>" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+          <div class="mb-3">
+            <label class="form-label">Nombre</label>
+            <input class="form-control" name="nombre" value="<%= product?.nombre || '' %>" required />
+            <div class="invalid-feedback">Ingresa un nombre.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Precio</label>
+            <input type="number" step="0.01" class="form-control" name="precio" value="<%= product?.precio || '' %>" required />
+            <div class="invalid-feedback">Ingresa un precio válido.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Descripción</label>
+            <textarea class="form-control" rows="3" name="descripcion"><%= product?.descripcion || '' %></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Imagen (opcional)</label>
+            <input type="file" class="form-control" name="imagen" accept="image/*" onchange="previewFile(this)">
+            <div class="form-text">JPG/PNG hasta 5MB.</div>
+          </div>
+
+          <div class="mb-3">
+            <div id="previewWrap" class="d-none">
+              <p class="text-muted small mb-2">Vista previa:</p>
+              <img id="previewImg" class="img-thumbnail" style="width:160px;height:160px;object-fit:cover;">
+            </div>
+
+            <% if (product?.imageKey) { %>
+              <p class="text-muted small mb-2">Imagen actual:</p>
+              <img src="<%= `${publicBase}/${product.imageKey}` %>" class="img-thumbnail" style="width:160px;height:160px;object-fit:cover;">
+            <% } %>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Guardar</button>
+            <a class="btn btn-outline-secondary" href="/">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Bootstrap validation
+  (() => {
+    const forms = document.querySelectorAll('.needs-validation');
+    Array.from(forms).forEach(form => {
+      form.addEventListener('submit', e => {
+        if (!form.checkValidity()) { e.preventDefault(); e.stopPropagation(); }
+        form.classList.add('was-validated');
+      }, false);
+    });
+  })();
+
+  // Preview de imagen
+  function previewFile(input) {
+    const file = input.files?.[0];
+    const wrap = document.getElementById('previewWrap');
+    const img  = document.getElementById('previewImg');
+    if (!file) { wrap.classList.add('d-none'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      img.src = e.target.result;
+      wrap.classList.remove('d-none');
+    };
+    reader.readAsDataURL(file);
+  }
+</script>
+
+<%- include('_end') %>

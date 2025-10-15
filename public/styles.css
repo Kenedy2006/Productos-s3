@@ -1,0 +1,3 @@
+/* Toques sutiles encima de Bootstrap */
+body { scroll-behavior: smooth; }
+.table td, .table th { vertical-align: middle; }

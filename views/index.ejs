@@ -1,0 +1,56 @@
+<%- include('layout') %>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">Productos</h1>
+  <a href="/nuevo" class="btn btn-primary">
+    + Nuevo producto
+  </a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width:120px;">Imagen</th>
+            <th>Nombre</th>
+            <th style="width:140px;">Precio</th>
+            <th style="width:180px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (items.length === 0) { %>
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">
+                Aún no hay productos. Crea el primero.
+              </td>
+            </tr>
+          <% } %>
+
+          <% items.forEach(p => { %>
+            <tr>
+              <td>
+                <% if (p.imageKey) { %>
+                  <img src="<%= `${publicBase}/${p.imageKey}` %>" class="img-thumbnail" style="width:100px;height:100px;object-fit:cover;">
+                <% } else { %>
+                  <div class="text-muted small">Sin imagen</div>
+                <% } %>
+              </td>
+              <td class="fw-semibold"><%= p.nombre %></td>
+              <td>S/ <%= Number(p.precio).toFixed(2) %></td>
+              <td>
+                <a href="/editar/<%= p.id %>" class="btn btn-sm btn-outline-secondary">Editar</a>
+                <form action="/productos/<%= p.id %>/delete" method="post" class="d-inline" onsubmit="return confirm('¿Eliminar este producto?');">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%- include('_end') %>
